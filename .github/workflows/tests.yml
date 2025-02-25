@@ -48,7 +48,7 @@ jobs:
           ./mvnw clean verify -Pnative -Dquarkus.profile=test
           -Dquarkus.native.container-build=true
           -Dquarkus.native.builder-image=${BUILDER_IMAGE}
-      - uses: actions/upload-artifact@v3
+      - uses: actions/upload-artifact@v4
         if: always()
         with:
           name: test-reports-${{ matrix.os }}
