@@ -139,7 +139,7 @@ public class CommentApplication {
             return null;
         };
         vertx.executeBlocking(watcherTask)
-                .onFailure(throwable -> LOG.error("File watcher failed: " + throwable.getMessage()));
+                .onFailure(throwable -> LOG.error("File watcher failed: " + throwable));
     }
 
     /**

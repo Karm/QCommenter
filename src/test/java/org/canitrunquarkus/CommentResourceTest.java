@@ -105,6 +105,9 @@ class CommentResourceTest {
 
     @Test
     public void testPostComment() {
+
+        wireMockServer.resetRequests();
+
         given()
                 .header("NOT_GITHUB_TOKEN", NOT_GITHUB_TOKEN)
                 .contentType(ContentType.JSON)
