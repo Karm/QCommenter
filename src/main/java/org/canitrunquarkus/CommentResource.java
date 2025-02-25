@@ -52,13 +52,13 @@ public class CommentResource {
     CommentApplication app;
 
     /**
-     * curl -X POST http://localhost:8080/comment -H "NOT_GITHUB_TOKEN: Changeit" -H "Content-Type: application/json" -d
+     * curl -X POST http://localhost:8080/comment -H "not-github-token: Changeit" -H "Content-Type: application/json" -d
      * '{"body":"example body","org":"exampleOrg","repo":"exampleRepo","id":"123"}'
      */
     @POST
     @Consumes(MediaType.APPLICATION_JSON)
     @Produces(MediaType.TEXT_PLAIN)
-    public RestResponse<String> postComment(@HeaderParam("NOT_GITHUB_TOKEN") String token,
+    public RestResponse<String> postComment(@HeaderParam("not-github-token") String token,
             Comment comment) throws NoSuchAlgorithmException {
         String error = Validation.validateOrg(comment.org());
         if (error != null) {
@@ -69,7 +69,7 @@ public class CommentResource {
             return RestResponse.ResponseBuilder.<String> create(BAD_REQUEST).entity(error).build();
         }
         if (!validateToken(token, comment.org() + "/" + comment.repo())) {
-            return RestResponse.ResponseBuilder.<String> create(FORBIDDEN).entity("Invalid NOT_GITHUB_TOKEN value.").build();
+            return RestResponse.ResponseBuilder.<String> create(FORBIDDEN).entity("Invalid not-github-token value.").build();
         }
         error = Validation.validateBody(comment.body(), maxCommentLength);
         if (error != null) {

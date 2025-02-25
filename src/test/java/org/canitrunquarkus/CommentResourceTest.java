@@ -109,7 +109,7 @@ class CommentResourceTest {
         wireMockServer.resetRequests();
 
         given()
-                .header("NOT_GITHUB_TOKEN", NOT_GITHUB_TOKEN)
+                .header("not-github-token", NOT_GITHUB_TOKEN)
                 .contentType(ContentType.JSON)
                 .body(requestBody)
                 .when()
@@ -133,7 +133,7 @@ class CommentResourceTest {
 
         // bad token
         given()
-                .header("NOT_GITHUB_TOKEN", NOT_GITHUB_TOKEN + "gibberish")
+                .header("not-github-token", NOT_GITHUB_TOKEN + "gibberish")
                 .contentType(ContentType.JSON)
                 .body(requestBody)
                 .when()
@@ -145,7 +145,7 @@ class CommentResourceTest {
 
         // org doesn't match the token
         given()
-                .header("NOT_GITHUB_TOKEN", NOT_GITHUB_TOKEN)
+                .header("not-github-token", NOT_GITHUB_TOKEN)
                 .contentType(ContentType.JSON)
                 .body(requestBody.replace("exampleOrg", "gibberishOrg"))
                 .when()
@@ -163,7 +163,7 @@ class CommentResourceTest {
         final String NEW_NOT_GITHUB_TOKEN = "SomeNewToken";
 
         given()
-                .header("NOT_GITHUB_TOKEN", NEW_NOT_GITHUB_TOKEN)
+                .header("not-github-token", NEW_NOT_GITHUB_TOKEN)
                 .contentType(ContentType.JSON)
                 .body(requestBody)
                 .when()
@@ -187,7 +187,7 @@ class CommentResourceTest {
                 .until(() -> {
                     try {
                         given()
-                                .header("NOT_GITHUB_TOKEN", NEW_NOT_GITHUB_TOKEN)
+                                .header("not-github-token", NEW_NOT_GITHUB_TOKEN)
                                 .contentType(ContentType.JSON)
                                 .body(requestBody)
                                 .when()
@@ -217,7 +217,7 @@ class CommentResourceTest {
                 .until(() -> {
                     try {
                         given()
-                                .header("NOT_GITHUB_TOKEN", NEW_NOT_GITHUB_TOKEN)
+                                .header("not-github-token", NEW_NOT_GITHUB_TOKEN)
                                 .contentType(ContentType.JSON)
                                 .body(requestBody)
                                 .when()
@@ -240,7 +240,7 @@ class CommentResourceTest {
         final int queueSize = 70;
         for (int i = 0; i < queueSize; i++) {
             final int statusCode = given()
-                    .header("NOT_GITHUB_TOKEN", NOT_GITHUB_TOKEN)
+                    .header("not-github-token", NOT_GITHUB_TOKEN)
                     .contentType(ContentType.JSON)
                     .body(requestBody)
                     .when()

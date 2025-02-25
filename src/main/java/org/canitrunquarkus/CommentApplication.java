@@ -115,9 +115,9 @@ public class CommentApplication {
     }
 
     void onStop(@Observes ShutdownEvent ev) throws IOException {
-        watchService.close();
-        webClient.close();
         vertx.close();
+        webClient.close();
+        watchService.close();
     }
 
     private void startFileWatcher() {
