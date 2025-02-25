@@ -1,0 +1,56 @@
+name: Tests
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+    paths-ignore:
+      - 'LICENSE'
+      - '**.md'
+  pull_request:
+    types: [ opened, synchronize, reopened, ready_for_review ]
+    branches:
+      - main
+    paths-ignore:
+      - 'LICENSE'
+      - '**.md'
+
+env:
+  LANG: en_US.UTF-8
+  BUILDER_IMAGE: quay.io/quarkus/ubi-quarkus-mandrel-builder-image:jdk-21
+
+jobs:
+  run-units:
+    name: Tests - ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ ubuntu-22.04 ]
+    steps:
+      - uses: actions/checkout@v2
+        with:
+          fetch-depth: 1
+      - uses: actions/cache@v2
+        with:
+          path: ~/.m2/repository
+          key: ${{ runner.os }}-maven-${{ hashFiles('**/pom.xml') }}
+          restore-keys: |
+            ${{ runner.os }}-maven-
+      - name: Install JDK 21
+        uses: actions/setup-java@v2
+        with:
+          distribution: temurin
+          java-version: 21
+      - name: Test
+        run: >-
+          ./mvnw clean verify -Pnative -Dquarkus.profile=test
+          -Dquarkus.native.container-build=true
+          -Dquarkus.native.builder-image=${BUILDER_IMAGE}
+      - uses: actions/upload-artifact@v3
+        if: always()
+        with:
+          name: test-reports-${{ matrix.os }}
+          path: |
+            target/surefire-reports
