@@ -69,10 +69,10 @@ public class CommentApplication {
     private Path tokenHashesFile;
     private Path dir;
 
-    @ConfigProperty(name = "github.api.url")
+    @ConfigProperty(name = "my.github.api.url")
     private String githubApiUrl;
 
-    @ConfigProperty(name = "github.api.token")
+    @ConfigProperty(name = "my.github.api.token")
     private String githubToken;
 
     @ConfigProperty(name = "comments.batch.intervals.ms")
