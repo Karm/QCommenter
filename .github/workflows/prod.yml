@@ -34,7 +34,7 @@ jobs:
           ./mvnw clean verify -Pnative -Dquarkus.profile=test
           -Dquarkus.native.container-build=true
           -Dquarkus.native.builder-image=${BUILDER_IMAGE} &&
-          ./mvnw -DskipTests -Pnative
+          ./mvnw package -DskipTests -Pnative
           -Dquarkus.native.container-build=true -Dquarkus.profile=prod
           -Dquarkus.native.builder-image=${BUILDER_IMAGE}
       - name: Deploy
