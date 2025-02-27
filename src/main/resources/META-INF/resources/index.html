@@ -81,7 +81,25 @@
         <path class="cls-2" d="M778.37,1H501.6a68.91,68.91,0,0,0-68.71,68.7V346.48a68.91,68.91,0,0,0,68.71,68.7H691.14L640,290.92l-37.12,78.46H501.6a23.21,23.21,0,0,1-22.9-22.9V69.7a23.21,23.21,0,0,1,22.9-22.9H778.37a23.21,23.21,0,0,1,22.9,22.9V346.48a23.21,23.21,0,0,1-22.9,22.9H718.31l18.86,45.8h41.2a68.91,68.91,0,0,0,68.71-68.7V69.7A68.91,68.91,0,0,0,778.37,1Z"/>
     </svg>
     <h1>Glorified cURL service</h1>
+    <p id="status"></p>
     <p><a href="https://github.com/Karm/QCommenter">https://github.com/Karm/QCommenter</a></p>
 </div>
+<script>
+    fetch('/comment/status')
+        .then(response => {
+            if (!response.ok) throw new Error('Failed to fetch status');
+            return response.json();
+        })
+        .then(data => {
+            const statusElement = document.getElementById('status');
+            statusElement.textContent = `Queue Size: ${data.size}, Comments Since Start: ${data.commentsSinceStart}`;
+            statusElement.style.color = '#ff004a';
+            statusElement.style.fontFamily = 'Arial, sans-serif';
+        })
+        .catch(error => {
+            console.error('Error fetching status:', error);
+            document.getElementById('status').textContent = 'Status unavailable';
+        });
+</script>
 </body>
 </html>

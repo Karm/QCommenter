@@ -60,6 +60,8 @@ import java.util.zip.ZipEntry;
 import java.util.zip.ZipInputStream;
 
 import static java.nio.charset.StandardCharsets.UTF_8;
+import static org.jboss.resteasy.reactive.RestResponse.StatusCode.FOUND;
+import static org.jboss.resteasy.reactive.RestResponse.StatusCode.OK;
 
 @ApplicationScoped
 public class CommentApplication {
@@ -70,6 +72,8 @@ public class CommentApplication {
     Vertx vertx;
 
     private WebClient webClient;
+
+    private Instant startTime;
 
     public static final ConcurrentHashSet<String> githubTokenOrgRepo = new ConcurrentHashSet<>();
 
@@ -109,22 +113,31 @@ public class CommentApplication {
     @ConfigProperty(name = "yaml.workflow.name")
     private String workflowName;
 
-    public final AtomicInteger commentCounter = new AtomicInteger(0);
+    @ConfigProperty(name = "lookback.seconds", defaultValue = "0")
+    private Integer lookbackSeconds;
+
+    private final AtomicInteger commentCounter = new AtomicInteger(0);
     private Queue<Comment> commentQueue;
     private WatchService watchService;
 
     private final ConcurrentMap<Integer, Long> lastProcessedRunIds = new ConcurrentHashMap<>();
     private final ConcurrentMap<Integer, String> prHeadShas = new ConcurrentHashMap<>();
 
-    public record Comment(String body, String org, String repo, String token, Integer id, Instant age) {
-    }
-
-    public record WorkflowRunData(String prNumber, String org, String repo, String runId, String commentBody) {
+    public record Comment(
+            String prNumber,
+            String org,
+            String repo,
+            String token,
+            String runId,
+            // escaped comment body
+            String body,
+            // timestamp for queue aging
+            Instant age
+    ) {
     }
 
     @PostConstruct
     public void init() throws IOException {
-        // keep an eye on the file with tokens
         watchService = FileSystems.getDefault().newWatchService();
         webClient = WebClient.create(vertx, new WebClientOptions()
                 .setSsl(githubApiUrl.startsWith("https:")));
@@ -137,6 +150,8 @@ public class CommentApplication {
     }
 
     void onStart(@Observes StartupEvent event) {
+        startTime = Instant.now().minusSeconds(lookbackSeconds);
+        LOG.info("App started at: " + startTime);
         startFileWatcher();
         processFile();
         vertx.setPeriodic(batchIntervalSeconds * 1000L, id -> processCommentsBatch());
@@ -186,6 +201,10 @@ public class CommentApplication {
         return commentQueue.size();
     }
 
+    public AtomicInteger getCommentCounter() {
+        return commentCounter;
+    }
+
     private void processCommentsBatch() {
         if (commentQueue.isEmpty()) {
             return;
@@ -203,9 +222,9 @@ public class CommentApplication {
     private void sendCommentToGitHub(Comment comment) {
         final String jsonBody = "{\"body\": " + comment.body() + "}";
         LOG.info("Posting comment to GitHub: " + jsonBody);
-        final String target = githubApiUrl + "/repos/" + comment.org() + "/" + comment.repo() + "/issues/" + comment.id() + "/comments";
+        final String target = githubApiUrl + "/repos/" + comment.org() + "/" + comment.repo() + "/issues/" + comment.prNumber() + "/comments";
         webClient.postAbs(target)
-                .putHeader("Authorization", "token " + comment.token)
+                .putHeader("Authorization", "token " + comment.token())
                 .putHeader("Accept", "application/vnd.github+json")
                 .putHeader("Content-Type", "application/json")
                 .sendBuffer(Buffer.buffer(jsonBody))
@@ -263,12 +282,18 @@ public class CommentApplication {
                         final Long runId = run.getLong("id");
                         final String conclusion = run.getString("conclusion");
                         final String createdAt = run.getString("created_at");
+                        final String updatedAt = run.getString("updated_at");
                         final JsonArray prsInRun = run.getJsonArray("pull_requests");
                         final String headSha = run.getString("head_sha");
+                        final Instant runUpdatedAt = Instant.parse(updatedAt);
                         LOG.debug("Run " + runId + " for PR #" + prNumber + " created at " + createdAt +
-                                " has conclusion: " + conclusion + ", PRs: " + prsInRun.encode() +
+                                " updated at " + updatedAt + " has conclusion: " + conclusion + ", PRs: " + prsInRun.encode() +
                                 ", head_sha: " + headSha);
-                        // failed workflows have results too...
+                        if (!runUpdatedAt.isAfter(startTime)) {
+                            LOG.debug(
+                                    "Skipping run " + runId + " for PR #" + prNumber + " (completed at " + updatedAt + " before app start " + startTime + ")");
+                            continue;
+                        }
                         if (workflowName.equals(run.getString("name")) &&
                                 ("success".equals(conclusion) || "failure".equals(conclusion))) {
                             // check PRs array: MAy be empty if ran from fork
@@ -314,7 +339,7 @@ public class CommentApplication {
                     final JsonArray artifacts = artifactsData.getJsonArray("artifacts");
                     // e.g. comment-data-8.zip
                     final String artifactName = artifactNamePrefix + prNumber;
-                    LOG.debug("Fetched " + artifacts.size() + " artifacts for run " + runId + "and PR #" + prNumber);
+                    LOG.debug("Fetched " + artifacts.size() + " artifacts for run " + runId + " and PR #" + prNumber);
                     for (int i = 0; i < artifacts.size(); i++) {
                         final JsonObject artifact = artifacts.getJsonObject(i);
                         if (artifactName.equals(artifact.getString("name"))) {
@@ -343,7 +368,7 @@ public class CommentApplication {
                 .onSuccess(response -> {
                     LOG.debug("Initial response status code: " + response.statusCode());
                     LOG.debug("Initial response headers: " + response.headers().entries().toString());
-                    if (response.statusCode() == 302) {
+                    if (response.statusCode() == FOUND) {
                         final String redirectUrl = response.getHeader("Location");
                         LOG.debug("Redirecting to: " + redirectUrl);
                         webClient.getAbs(redirectUrl)
@@ -355,8 +380,7 @@ public class CommentApplication {
                                 })
                                 .onFailure(err -> LOG.error(
                                         "Failed to follow redirect for artifact " + artifactId + " from run " + runId + " repo " + org + "/" + repo + ": " + err.getMessage()));
-                    } else if (response.statusCode() == 200) {
-                        // no redirect, e.g. local thing
+                    } else if (response.statusCode() == OK) {
                         processArtifactResponse(response, artifactId, runId, org, repo, token);
                     } else {
                         LOG.error(
@@ -396,40 +420,30 @@ public class CommentApplication {
                 LOG.error("Artifact " + artifactId + " entry " + entry.getName() + " from run " + runId + " is empty");
                 return;
             }
-            /*
-             * Expected JSON data in the artifact:
-             * {
-             *   "pr_number": "8",
-             *   "org": "Karm",
-             *   "repo": "quarkus-images",
-             *   "comment_body": "Comment..."
-             * }
-             */
             final JsonObject data = new JsonObject(json);
             LOG.debug("Gonna process this data: " + data.encode());
-            // Do I have to do this to have it escaped?
-            final String escapedCommentBody = Json.encode(data.getString("comment_body"));
+            final String escapedCommentBody = Json.encode(data.getString("comment_body") + signature);
             LOG.debug("Escaped comment_body: " + escapedCommentBody);
-            final WorkflowRunData runData = new WorkflowRunData(
+            final Comment comment = new Comment(
                     data.getString("pr_number"),
                     data.getString("org"),
                     data.getString("repo"),
+                    token,
                     runId.toString(),
-                    escapedCommentBody
+                    escapedCommentBody,
+                    Instant.now()
             );
-            if (!runData.org().equals(org) || !runData.repo().equals(repo)) {
+            if (!comment.org().equals(org) || !comment.repo().equals(repo)) {
                 LOG.error(
-                        "Mismatch in org/repo for run " + runId + ": " + org + "/" + repo + " vs " + runData.org() + "/" + runData.repo());
+                        "Mismatch in org/repo for run " + runId + ": " + org + "/" + repo + " vs " + comment.org() + "/" + comment.repo());
                 return;
             }
             LOG.debug("Gonna queue this comment: " + escapedCommentBody);
-            if (commentQueue.offer(
-                    new Comment(escapedCommentBody, runData.org(), runData.repo(), token, Integer.parseInt(runData.prNumber()),
-                            Instant.now()))) {
-                LOG.info("Queued comment for PR #" + runData.prNumber() + " from run " + runId + " repo " + org + "/" + repo);
-                lastProcessedRunIds.put(Integer.parseInt(runData.prNumber()), Long.parseLong(runData.runId()));
+            if (commentQueue.offer(comment)) {
+                LOG.info("Queued comment for PR #" + comment.prNumber() + " from run " + runId + " repo " + org + "/" + repo);
+                lastProcessedRunIds.put(Integer.parseInt(comment.prNumber()), Long.parseLong(comment.runId()));
             } else {
-                LOG.error("Failed to queue comment for PR #" + runData.prNumber() + " from run " + runId + " (queue full)");
+                LOG.error("Failed to queue comment for PR #" + comment.prNumber() + " from run " + runId + " (queue full)");
             }
         } catch (IOException e) {
             LOG.error("Failed to unzip artifact " + artifactId + " for run " + runId + ": " + e.getMessage(), e);

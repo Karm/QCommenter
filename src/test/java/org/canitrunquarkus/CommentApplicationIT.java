@@ -22,6 +22,6 @@ package org.canitrunquarkus;
 import io.quarkus.test.junit.QuarkusIntegrationTest;
 
 @QuarkusIntegrationTest
-class CommentResourceIT extends CommentResourceTest {
+class CommentApplicationIT extends CommentApplicationTest {
     // Execute the same tests but in packaged mode.
 }
